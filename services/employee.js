@@ -1,4 +1,3 @@
-const pool = require('../config/db.js');
 const { validationResult, body } = require('express-validator');
 const mm = require('./globalModule.js');
 
