@@ -33,7 +33,7 @@ exports.sanitizeFilter = (input) => {
 exports.encryptValue = (value) => {
     const stringData = String(value);
     return CryptoJS.AES.encrypt(stringData, process.env.SECRET_KEY).toString();
-}
+};
 
 exports.getSystemDate = () => {
     let date_ob = new Date();
@@ -53,7 +53,7 @@ exports.getSystemDate = () => {
     date_cur = year + "-" + month + "-" + day + " " + hours + ":" + minutes + ":" + seconds;
 
     return date_cur;
-}
+};
 
 exports.authMiddleware = (req, res, next) => {
     try {
