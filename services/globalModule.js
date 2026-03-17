@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const pool = require('../config/db.js');
 
 exports.sanitizeFilter = (input) => {
 
@@ -107,5 +108,27 @@ exports.authMiddleware = (req, res, next) => {
             message: "Server Error"
         });
 
+    }
+};
+
+exports.executeQuery = async (query, params = []) => {
+    let connection;
+    try {
+        connection = await pool.getConnection();
+
+        const [result] = await connection.query(query, params);
+
+        console.log("\n\nSuccess SQL Query: ", query);
+        console.log("\nSuccess Data: ",params);
+        console.log();
+
+        return result;
+
+    } catch (error) {
+        console.log('\nFaild SQL Query: ', error.sql);
+        throw error;
+
+    } finally {
+        if (connection) connection.release();
     }
 };

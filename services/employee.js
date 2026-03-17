@@ -2,96 +2,83 @@ const pool = require('../config/db.js');
 const { validationResult, body } = require('express-validator');
 const mm = require('./globalModule.js');
 
-const getData = (req) => {
-    var data = {
-        NAME: req.body.NAME,
-        MOBILE: req.body.MOBILE,
-        STATUS: req.body.STATUS,
-        ADDRESS: req.body.ADDRESS ? req.body.ADDRESS : '',
-        FIREBASE_REG_TOKEN: req.body.FIREBASE_REG_TOKEN ? req.body.FIREBASE_REG_TOKEN : null
+const handleValidation = (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({
+            success: false,
+            message: errors.array()[0].msg
+        });
     }
-    return data;
-}
-
-exports.validate = () => {
-    return [
-        body('NAME')
-            .exists().withMessage('NAME parameter missing')
-            .bail()
-            .trim()
-            .notEmpty().withMessage('NAME cannot be empty')
-            .isLength({ min: 2, max: 100 }).withMessage('NAME length must be 2-100'),
-
-        body('MOBILE')
-            .exists().withMessage('MOBILE parameter missing')
-            .bail()
-            .trim()
-            .isMobilePhone('en-IN').withMessage('Invalid mobile number'),
-
-        body('STATUS')
-            .exists().withMessage('STATUS parameter missing')
-            .bail()
-            .isIn([0, 1]).withMessage('STATUS must be 0 or 1'),
-
-        body('ADDRESS')
-            .optional()
-            .trim()
-            .isLength({ max: 500 }).withMessage('ADDRESS too long')
-    ];
 };
 
-
-exports.validateUpdate = () => {
-    return [
-
-        body('ID')
-            .exists().withMessage('ID parameter missing')
-            .bail()
-            .isInt().withMessage('ID should be number'),
-
-        body('NAME')
-            .optional()
-            .trim()
-            .notEmpty().withMessage('NAME cannot be empty')
-            .isLength({ min: 2, max: 100 }),
-
-        body('MOBILE')
-            .optional()
-            .trim()
-            .isMobilePhone('en-IN').withMessage('Invalid mobile number'),
-
-        body('STATUS')
-            .optional()
-            .isIn([0, 1]).withMessage('STATUS must be 0 or 1'),
-
-        body('ADDRESS')
-            .optional()
-            .trim()
-            .isLength({ max: 500 }),
-
-        body('FIREBASE_REG_TOKEN')
-            .optional()
-            .trim()
-    ];
-};
+const getData = (req) => ({
+    NAME: req.body.NAME,
+    MOBILE: req.body.MOBILE,
+    EMAIL: req.body.EMAIL || '',
+    STATUS: req.body.STATUS,
+    ADDRESS: req.body.ADDRESS || '',
+    FIREBASE_REG_TOKEN: req.body.FIREBASE_REG_TOKEN || null
+});
 
 
-exports.validateDelete = () => {
-    return [
-        body('ID')
-            .exists().withMessage('ID parameter missing')
-            .bail()
-            .isInt().withMessage('ID should be number')
-    ];
-};
+exports.validate = () => [
+    body('NAME')
+        .exists().withMessage('NAME parameter missing')
+        .bail()
+        .trim()
+        .notEmpty().withMessage('NAME cannot be empty')
+        .isLength({ min: 2, max: 100 })
+        .withMessage('Name max length is 100'),
+
+    body('MOBILE')
+        .exists().withMessage('MOBILE parameter missing')
+        .bail()
+        .trim()
+        .isMobilePhone('en-IN').withMessage('Invalid mobile number'),
+
+    body('STATUS')
+        .exists().withMessage('STATUS parameter missing')
+        .bail()
+        .isIn([0, 1]).withMessage('STATUS must be 0 or 1'),
+
+    body('ADDRESS')
+        .optional()
+        .trim()
+        .isLength({ max: 500 }),
+
+    body('EMAIL')
+        .optional({ checkFalsy: true })
+        .trim()
+        .normalizeEmail()
+        .isEmail().withMessage('Invalid email format')
+        .isLength({ max: 64 }).withMessage('Email must be max 64 characters')
+];
+
+exports.validateUpdate = () => [
+    body('ID')
+        .exists().withMessage('ID parameter missing')
+        .bail()
+        .isInt().withMessage('ID should be number'),
+
+    body('NAME').optional().trim().notEmpty().isLength({ min: 2, max: 100 }),
+    body('MOBILE').optional().trim().isMobilePhone('en-IN'),
+    body('STATUS').optional().isIn([0, 1]),
+    body('ADDRESS').optional().trim().isLength({ max: 500 }),
+    body('FIREBASE_REG_TOKEN').optional().trim()
+];
+
+exports.validateDelete = () => [
+    body('ID')
+        .exists().withMessage('ID parameter missing')
+        .bail()
+        .isInt().withMessage('ID should be number')
+];
+
 
 exports.get = async (req, res) => {
 
-    let sortKey = req.body.sortKey ? req.body.sortKey : 'ID';
-    let sortValue = req.body.sortValue ? req.body.sortValue : 'DESC';
-    let filter = req.body.filter ? req.body.filter : '';
-
-    var IS_FILTER_WRONG = mm.sanitizeFilter(filter);
+    let { sortKey = 'ID', sortValue = 'DESC', filter = '' } = req.body;
 
     try {
 
@@ -101,25 +88,28 @@ exports.get = async (req, res) => {
             sortKey = 'ID';
         }
 
-        if (!['ASC', 'DESC'].includes(sortValue.toUpperCase())) {
+        sortValue = (sortValue || 'DESC').toUpperCase();
+        if (!['ASC', 'DESC'].includes(sortValue)) {
             sortValue = 'DESC';
         }
 
-        if (IS_FILTER_WRONG) {
-
+        if (mm.sanitizeFilter(filter)) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid filter parameter."
             });
-
         }
 
-        const query =
-            'SELECT * FROM employee_master WHERE 1=1 AND ARCHIVE=0 ' +
-            (filter ? ' AND (' + filter + ')' : '') +
-            ' ORDER BY ' + sortKey + ' ' + sortValue;
+        let query = `SELECT * FROM employee_master 
+                    WHERE ARCHIVE = 0`;
 
-        const [result] = await pool.query(query);
+        if (filter) {
+            query += ` AND (${filter})`;
+        }
+
+        query += ` ORDER BY ${sortKey} ${sortValue}`;
+
+        const result = await mm.executeQuery(query);
 
         return res.status(200).json({
             success: true,
@@ -129,7 +119,7 @@ exports.get = async (req, res) => {
 
     } catch (error) {
 
-        console.log(error);
+        console.error("GET Error:", error);
 
         if (error.code === "ER_BAD_FIELD_ERROR") {
             return res.status(400).json({
@@ -151,66 +141,54 @@ exports.get = async (req, res) => {
         });
 
     }
+};
 
-}
 
 exports.create = async (req, res) => {
 
+    const validationError = handleValidation(req, res);
+    if (validationError) return;
+
     try {
-
-        const errors = validationResult(req);
-
-        if (!errors.isEmpty()) {
-            return res.status(400).json({
-                success: false,
-                message: errors.array()[0].msg
-            });
-        }
 
         const data = getData(req);
 
-        const [result] = await pool.query(
-            `INSERT INTO employee_master 
-            (NAME, MOBILE, STATUS, ADDRESS, FIREBASE_REG_TOKEN, ARCHIVE)
-            VALUES (?, ?, ?, ?, ?, 0)`,
-            [
-                data.NAME,
-                data.MOBILE,
-                data.STATUS,
-                data.ADDRESS,
-                data.FIREBASE_REG_TOKEN
-            ]
-        );
+        let query = `INSERT INTO employee_master 
+                    (NAME, EMAIL, MOBILE, STATUS, ADDRESS, FIREBASE_REG_TOKEN, ARCHIVE)
+                    VALUES (?, ?, ?, ?, ?, ?, 0)`;
+        const insertData = [
+            data.NAME,
+            data.EMAIL,
+            data.MOBILE,
+            data.STATUS,
+            data.ADDRESS,
+            data.FIREBASE_REG_TOKEN
+        ]
+
+        const result = await mm.executeQuery(query, insertData);
 
         return res.status(201).json({
             success: true,
             message: "Employee created successfully",
-            data: {
-                insertId: result.insertId
-            }
+            data: { insertId: result.insertId }
         });
 
     } catch (error) {
 
-        console.log(error);
+        console.error("\nCREATE Error:", error);
+        console.log();
 
         if (error.code === 'ER_DUP_ENTRY') {
 
             let field = "Record";
 
-            if (error.sqlMessage.includes('MOBILE')) {
-                field = "Mobile number";
-            }
-
-            if (error.sqlMessage.includes('EMAIL')) {
-                field = "Email";
-            }
+            if (error.sqlMessage.includes('MOBILE')) field = "Mobile number";
+            if (error.sqlMessage.includes('EMAIL')) field = "Email";
 
             return res.status(409).json({
                 success: false,
                 message: `${field} already exists`
             });
-
         }
 
         return res.status(500).json({
@@ -219,26 +197,21 @@ exports.create = async (req, res) => {
         });
 
     }
-
 };
+
 
 exports.update = async (req, res) => {
 
+    const validationError = handleValidation(req, res);
+    if (validationError) return;
+
     try {
-
-        const errors = validationResult(req);
-
-        if (!errors.isEmpty()) {
-            return res.status(400).json({
-                success: false,
-                message: errors.array()[0].msg
-            });
-        }
 
         const id = req.body.ID;
 
         const allowedFields = [
             "NAME",
+            "EMAIL",
             "MOBILE",
             "STATUS",
             "ADDRESS",
@@ -270,7 +243,7 @@ exports.update = async (req, res) => {
             WHERE ID=? AND ARCHIVE=0
         `;
 
-        const [result] = await pool.query(query, values);
+        const result = await mm.executeQuery(query, values);
 
         if (result.affectedRows === 0) {
             return res.status(404).json({
@@ -286,7 +259,7 @@ exports.update = async (req, res) => {
 
     } catch (error) {
 
-        console.log(error);
+        console.error("UPDATE Error:", error);
 
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(409).json({
@@ -301,28 +274,23 @@ exports.update = async (req, res) => {
         });
 
     }
-
 };
+
 
 exports.delete = async (req, res) => {
 
+    const validationError = handleValidation(req, res);
+    if (validationError) return;
+
     try {
-
-        const errors = validationResult(req);
-
-        if (!errors.isEmpty()) {
-            return res.status(400).json({
-                success: false,
-                message: errors.array()[0].msg
-            });
-        }
 
         const id = req.body.ID;
 
-        const [result] = await pool.query(
-            `UPDATE employee_master SET ARCHIVE = 1 WHERE ID = ? AND ARCHIVE=0`,
-            [id]
-        );
+        let query = `UPDATE employee_master 
+                     SET ARCHIVE = 1 
+                     WHERE ID = ? AND ARCHIVE=0`;
+
+        const result = await mm.executeQuery(query, [id]);
 
         if (result.affectedRows === 0) {
             return res.status(404).json({
@@ -338,7 +306,7 @@ exports.delete = async (req, res) => {
 
     } catch (error) {
 
-        console.log(error);
+        console.error("DELETE Error:", error);
 
         return res.status(500).json({
             success: false,
@@ -346,5 +314,4 @@ exports.delete = async (req, res) => {
         });
 
     }
-
-}
+};

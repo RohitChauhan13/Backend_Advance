@@ -21,7 +21,7 @@ app.use(cors());
 app.use('/static', express.static(path.join(__dirname, 'Uploads')));
 
 app.use(limiter);       
-app.use(authMiddleware); 
+// app.use(authMiddleware); 
 app.use('/api', globalRoute);
 
 const PORT = process.env.SERVER_PORT || 6232;
