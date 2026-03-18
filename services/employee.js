@@ -17,7 +17,7 @@ const getData = (req) => ({
     EMAIL: req.body.EMAIL || '',
     STATUS: req.body.STATUS,
     ADDRESS: req.body.ADDRESS || '',
-    FIREBASE_REG_TOKEN: req.body.FIREBASE_REG_TOKEN || null
+    FIREBASE_REG_TOKEN: req.body.FIREBASE_REG_TOKEN || ''
 });
 
 
